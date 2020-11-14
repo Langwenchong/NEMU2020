@@ -81,3 +81,33 @@ void load_elf_tables(int argc, char *argv[]) {
 	fclose(fp);
 }
 
+uint32_t get_var_val(char *var,bool*suc){
+	int i;
+	*suc=true;
+	for(i=0;i<nr_symtab_entry;i++){
+		if((symtab[i].st_info&0xf)==STT_OBJECT){
+			char syb[32];
+			char *tmp=strtab+symtab[i].st_name;
+			int len=strlen(tmp);
+			strncpy(syb,tmp,len);
+			syb[len]='\0';
+			if(strcmp(var,syb)==0)return symtab[i].st_value;
+		}
+	}
+	*suc=false;
+	return 0;
+}
+
+void get_func_name(swaddr_t *current_addr,char *name)
+{
+	int i;
+	for(i=0;i<nr_symtab_entry;i++){
+		if(((symtab[i].st_info&0xf)==STT_FUNC) &&( symtab[i].st_value<*current_addr)&&(symtab[i].st_value+symtab[i].st_size>=*current_addr)){
+			int len=strlen(strtab+symtab[i].st_name);
+			strncpy(name,strtab+symtab[i].st_name,len);
+			name[len]='\0';
+			return;
+		}
+	}
+	name[0]='\0';
+}

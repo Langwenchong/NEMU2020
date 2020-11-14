@@ -2,6 +2,11 @@
 
 #include "data-mov/mov.h"
 #include "data-mov/xchg.h"
+#include "data-mov/movext.h"
+#include "data-mov/cltd.h"
+#include "data-mov/leave.h"
+#include "data-mov/push.h"
+#include "data-mov/pop.h"
 
 #include "arith/dec.h"
 #include "arith/inc.h"
@@ -10,6 +15,11 @@
 #include "arith/mul.h"
 #include "arith/idiv.h"
 #include "arith/div.h"
+#include "arith/cmp.h"
+#include "arith/add.h"
+#include "arith/sub.h"
+#include "arith/adc.h"
+#include "arith/sbb.h"
 
 #include "logic/and.h"
 #include "logic/or.h"
@@ -19,8 +29,28 @@
 #include "logic/shl.h"
 #include "logic/shr.h"
 #include "logic/shrd.h"
+#include "logic/test.h"
+#include "logic/setne.h"
+
+#include "con-trans/call/call.h"
+#include "con-trans/je/je.h"
+#include "con-trans/ret/ret.h"
+#include "con-trans/jmp/jmp.h"
+#include "con-trans/jbe/jbe.h"
+#include "con-trans/jne/jne.h"
+#include "con-trans/jle/jle.h"
+#include "con-trans/jg/jg.h"
+#include "con-trans/jl/jl.h"
+#include "con-trans/jge/jge.h"
+#include "con-trans/ja/ja.h"
+#include "con-trans/js/js.h"
+#include "con-trans/jns/jns.h"
 
 #include "string/rep.h"
+#include "string/movs.h"
+#include "string/lods.h"
+#include "string/scas.h"
+#include "string/stos.h"
 
 #include "misc/misc.h"
 

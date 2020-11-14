@@ -8,7 +8,15 @@
 #include <readline/history.h>
 
 void cpu_exec(uint32_t);
-int breakpoint_num=1;
+void display_reg();
+
+typedef struct{
+	swaddr_t prev_ebp;
+	swaddr_t ret_addr;
+	uint32_t args[4];
+}PartOfStackFrame;
+
+void get_func_name(swaddr_t *current_addr,char *name);
 
 /* We use the `readline' library to provide more flexibility to read from stdin. */
 char* rl_gets() {
@@ -28,6 +36,98 @@ char* rl_gets() {
 	return line_read;
 }
 
+/* TODO: Add single step */
+static int cmd_si(char *args) {
+	char *arg = strtok(NULL, " ");
+	int i = 1;
+
+	if(arg != NULL) {
+		sscanf(arg, "%d", &i);
+	}
+	cpu_exec(i);
+	return 0;
+}
+
+/* TODO: Add info command */
+static int cmd_info(char *args) {
+	char *arg = strtok(NULL, " ");
+
+	if(arg != NULL) {
+		if(strcmp(arg, "r") == 0) {
+			display_reg();
+		}
+		else if(strcmp(arg, "w") == 0) {
+			list_watchpoint();
+		}
+	}
+	return 0;
+}
+
+/* Add examine memory */
+static int cmd_x(char *args) {
+	char *arg = strtok(NULL, " ");
+	int n;
+	swaddr_t addr;
+	int i;
+
+	if(arg != NULL) {
+		sscanf(arg, "%d", &n);
+
+		bool success;
+		addr = expr(arg + strlen(arg) + 1, &success);
+		if(success) { 
+			for(i = 0; i < n; i ++) {
+				if(i % 4 == 0) {
+					printf("0x%08x: ", addr);
+				}
+
+				printf("0x%08x ", swaddr_read(addr, 4));
+				addr += 4;
+				if(i % 4 == 3) {
+					printf("\n");
+				}
+			}
+			printf("\n");
+		}
+		else { printf("Bad expression\n"); }
+
+	}
+	return 0;
+}
+
+/* Add expression evaluation  */
+static int cmd_p(char *args) {
+	bool success;
+
+	if(args) {
+		uint32_t r = expr(args, &success);
+		if(success) { printf("0x%08x(%d)\n", r, r); }
+		else { printf("Bad expression\n"); }
+	}
+	return 0;
+}
+
+/* Add set watchpoint  */
+static int cmd_w(char *args) {
+	if(args) {
+		int NO = set_watchpoint(args);
+		if(NO != -1) { printf("Set watchpoint #%d\n", NO); }
+		else { printf("Bad expression\n"); }
+	}
+	return 0;
+}
+
+/* Add delete watchpoint */
+static int cmd_d(char *args) {
+	int NO;
+	sscanf(args, "%d", &NO);
+	if(!delete_watchpoint(NO)) {
+		printf("Watchpoint #%d does not exist\n", NO);
+	}
+
+	return 0;
+}
+
 static int cmd_c(char *args) {
 	cpu_exec(-1);
 	return 0;
@@ -37,117 +137,27 @@ static int cmd_q(char *args) {
 	return -1;
 }
 
-static int cmd_si(char *args){
-	char *arg=strtok(args," ");
-	if(arg==NULL){
-		printf("Please input more arguments.\n");
-		return 1;
-	}
-	int num=atoi(arg);
-	cpu_exec(num);
-	return 0;
-}
-
-static int cmd_info(char *args){
-	char *arg = strtok(args," ");
-	if(arg==NULL){
-		printf("Please input more arguments!\n");
-		return 1;
-	}
-	if(strcmp(arg,"r")==0){
-		printf("eax is %x\n",cpu.eax);
-		printf("ecx is %x\n",cpu.ecx);
-		printf("edx is %x\n",cpu.edx);
-		printf("ebx is %x\n",cpu.ebx);
-		printf("esp is %x\n",cpu.esp);
-		printf("ebp is %x\n",cpu.ebp);
-		printf("esi is %x\n",cpu.esi);
-		printf("edi is %x\n",cpu.edi);
-	}
-	else if(strcmp(arg,"w")==0){
-		print_wp();
-	}
-	return 0;
-}
-
-static int cmd_x(char *args){
-	char *arg=strtok(args," ");
-	if(arg==NULL){
-		printf("More parameter!");
-		return 1;
-	}
-	int len=atoi(arg);
-	char *EXPR=strtok(NULL," ");
-	if(expr==NULL){
-		printf("More parameter!");
-		return 1;
-	}
-	if(strtok(NULL," ")!=NULL){
-		printf("Too many parameter!");
-	}
-	int i;
-	char *str;
-	swaddr_t addr = strtol(EXPR,&str,16);
-	for(i=0;i<len;i++){
-		swaddr_t data=swaddr_read(addr,4);
-		printf("0x%08x ",addr);
-		int j=0;
-		for(j=0;j<4;j++){
-			printf("0x%02x ",data&0xff);
-			data>>=8;
-		}
-		addr+=4;
-		printf("\n");
-	}
-	return 0;
-}
-
-static int cmd_p(char *args){
+static int cmd_bt(char *args){
 	int num=0;
-	bool success;
-	num =expr(args,&success);
-	if(success){
-		printf("0x%X:\t%d\n",num,num);
+	char FuncArr[32];
+	memset(FuncArr,'\0',sizeof(FuncArr));//Initialize arr with '\0'
+	PartOfStackFrame current_ebp;//declaration
+	current_ebp.prev_ebp=reg_l(R_EBP);
+	current_ebp.ret_addr=cpu.eip;
+	while(current_ebp.prev_ebp>0){
+		get_func_name(&(current_ebp.ret_addr),FuncArr);
+		if(FuncArr[0]=='\0'){
+			printf("No function~\n");
+			break;
+		}
+		printf("No.%d 0x%08x in function %s()",num,current_ebp.ret_addr,FuncArr);
+		printf("The arguments are: first:0x%08x,second:0x%08x,third:0x%0x8,fourth:0x%0x8\n",swaddr_read(current_ebp.prev_ebp+8,4),swaddr_read(current_ebp.prev_ebp+12,4),swaddr_read(current_ebp.prev_ebp+16,4),swaddr_read(current_ebp.prev_ebp+20,4));
+	current_ebp.ret_addr=swaddr_read(current_ebp.prev_ebp+4,4);
+	current_ebp.prev_ebp=swaddr_read(current_ebp.prev_ebp,4);
+	num++;
 	}
-	else{
-		return -1;
-	}
 	return 0;
 }
-
-static int cmd_w(char *args){
-	WP *q;
-	bool success;
-	q=new_wp();
-	printf("Watchpoint at %d: %s\n",q->NO,args);
-	q->value=expr(args,&success);
-	strcpy(q->expr,args);
-	if(!success)Assert(1,"Wrong!");
-	printf("Value is %d\n",q->value);
-	return 0;
-}
-
-static int cmd_d(char *args){
-	int n;
-	sscanf(args,"%d",&n);
-	delete_wp(n);
-	return 0;
-}
-static int cmd_b(char *args){
-	bool success;
-	swaddr_t addr;
-	addr=expr(args+1,&success);
-	if(!success)assert(1);
-   	sprintf(args,"$eip == 0x%x\n", addr);
-	WP*q;
-	q=new_wp();
-	q->value=expr(args,&success);
-	q->b=breakpoint_num;
-	breakpoint_num++;
-	strcpy(q->expr,args);
-	return 0;
-}
-
 static int cmd_help(char *args);
 
 static struct {
@@ -157,15 +167,16 @@ static struct {
 } cmd_table [] = {
 	{ "help", "Display informations about all supported commands", cmd_help },
 	{ "c", "Continue the execution of the program", cmd_c },
-	{ "q", "Exit NEMU", cmd_q },
-	{ "si", "Single-step execution" , cmd_si },
-	{ "info", "Print program status(tap r)/Print watchpint information(tap w)", cmd_info },
-	{ "x" ,"Scanning the memmory" ,cmd_x },
-	{ "p" ,"Expression evaluation", cmd_p},
-	{ "w" ,"Stop the program if the result has changed", cmd_w},
-	{ "d" ,"Delete watchpoint", cmd_d},
-	{ "b" ,"Set watchpoint at addr" ,cmd_b}
+	{ "q", "Exit NEMU", cmd_q }, 
+
 	/* TODO: Add more commands */
+        { "si", "Single step", cmd_si },
+        { "info", "info r - print register values; info w - show watch point state", cmd_info },
+	{ "x", "Examine memory", cmd_x },
+        { "p", "Evaluate the value of expression", cmd_p },
+	{ "w", "Set watchpoint", cmd_w },
+	{ "d", "Delete watchpoint", cmd_d },
+	{ "bt", "Print backtrace of all the stack frames", cmd_bt}
 
 };
 
